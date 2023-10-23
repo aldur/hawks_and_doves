@@ -5,11 +5,16 @@ import collections
 import dataclasses
 from enum import Enum, IntEnum, auto
 from itertools import groupby
+import math
 import random
 
+import matplotlib.pyplot as plt
 import pandas as pd
+import seaborn as sns
 
-#|%%--%%| <sn894epeob|wlXlRnL3RM>
+sns.set_theme()
+
+# |%%--%%| <sn894epeob|wlXlRnL3RM>
 
 # Assumption: There's no way to know someone else's strategy without figthing.
 
@@ -38,11 +43,11 @@ class Points(IntEnum):
 
 @dataclasses.dataclass
 class FightResult:
-    a_score: int
-    b_score: int
+    a_payoff: int
+    b_payoff: int
 
     def reverse(self):
-        self.a_score, self.b_score = self.b_score, self.a_score
+        self.a_payoff, self.b_payoff = self.b_payoff, self.a_payoff
         return self
 
     def shuffle(self):
@@ -94,68 +99,154 @@ def mean(data) -> float:
 
 def simulate(population, n_fights=1000) -> dict[Strategy, dict[Strategy, float]]:
 
-    scores_by_species = collections.defaultdict(list)
+    payoffs_by_species = collections.defaultdict(list)
     for _ in range(n_fights):
         a, b = random.sample(population, k=2)  # without replacement
 
         result = fight(a, b)
 
-        scores_by_species[a].append((b, result.a_score))
-        scores_by_species[b].append((a, result.b_score))
+        payoffs_by_species[a].append((b, result.a_payoff))
+        payoffs_by_species[b].append((a, result.b_payoff))
 
     def key(t):
         species, _ = t
         return species.value
 
-    scores_matrix = {}
-    for species, scores in scores_by_species.items():
-        sorted_against_species = sorted(scores, key=key)
+    payoffs_matrix = {}
+    for species, payoffs in payoffs_by_species.items():
+        sorted_against_species = sorted(payoffs, key=key)
         grouped = groupby(
             sorted_against_species, key=key
         )  # needs elements sorted by group key
-        scores_matrix[species] = {
-            Strategy(s): mean(score for (_, score) in g) for s, g in grouped
+        payoffs_matrix[species] = {
+            Strategy(s): mean(payoff for (_, payoff) in g) for s, g in grouped
         }  # the matrix row for `species`
 
-    return scores_matrix
+    return payoffs_matrix
 
 
 # |%%--%%| <R1vGC6acZj|r0ej7vJAoa>
 
 population = [Strategy.DOVE for _ in range(100)]
 split = collections.Counter(population)
-scores_matrix = simulate(population)
+payoffs_matrix = simulate(population)
 print(split)
-scores_matrix = pd.DataFrame.from_dict(scores_matrix, orient="index")
-print(scores_matrix)
+payoffs_matrix = pd.DataFrame.from_dict(payoffs_matrix, orient="index")
+print(payoffs_matrix)
 
-#|%%--%%| <r0ej7vJAoa|mUdf1JF6HP>
+# |%%--%%| <r0ej7vJAoa|mUdf1JF6HP>
 
 population = [Strategy.DOVE for _ in range(100)]
 population[0] = Strategy.HAWK
 population[1] = Strategy.HAWK
 split = collections.Counter(population)
-scores_matrix = simulate(population)
+payoffs_matrix = simulate(population)
 print(split)
-scores_matrix = pd.DataFrame.from_dict(scores_matrix, orient="index")
-print(scores_matrix)
+payoffs_matrix = pd.DataFrame.from_dict(payoffs_matrix, orient="index")
+print(payoffs_matrix)
 
 # |%%--%%| <mUdf1JF6HP|9PfqgtKOiY>
+
 population = [Strategy.HAWK for _ in range(100)]
 split = collections.Counter(population)
-scores_matrix = simulate(population)
+payoffs_matrix = simulate(population)
 print(split)
-scores_matrix = pd.DataFrame.from_dict(scores_matrix, orient="index")
-print(scores_matrix)
+payoffs_matrix = pd.DataFrame.from_dict(payoffs_matrix, orient="index")
+print(payoffs_matrix)
 
-
-# |%%--%%| <9PfqgtKOiY|mJ6PD3diHn>
+# |%%--%%| <9PfqgtKOiY|0wmVWPdvIj>
 
 population_size = 100
-population = [Strategy.DOVE] * (population_size // 2) + [Strategy.HAWK] * (population_size // 2)
+population = [Strategy.DOVE] * (population_size // 2) + [Strategy.HAWK] * (
+    population_size // 2
+)
 assert len(population) == population_size
 split = collections.Counter(population)
 print(split)
-scores_matrix = simulate(population)
-scores_matrix = pd.DataFrame.from_dict(scores_matrix, orient="index")
-print(scores_matrix)
+payoffs_matrix = simulate(population)
+payoffs_matrix = pd.DataFrame.from_dict(payoffs_matrix, orient="index")
+print(payoffs_matrix)
+
+# |%%--%%| <0wmVWPdvIj|VzyBhD5y8z>
+
+population_size = 100
+n_hawks = 1
+population = [Strategy.HAWK] * n_hawks + [Strategy.DOVE] * (population_size - n_hawks)
+assert len(population) == population_size
+split = collections.Counter(population)
+
+payoffs_matrix = simulate(population, n_fights=10000)
+print(f"Population by species: {split}")
+
+weighted_avg_payoffs = {}
+for species, averaged_payoffs_by_species in payoffs_matrix.items():
+    # 👇 For each species:
+    # - Take the expected payoff per fight (against each other species)
+    # - Weight it by the adversary's _frequency_ in the population
+    # - Return the average value obtained.
+    weighted_avg_payoffs[species] = mean(
+        avg * split[s] / len(population)
+        for s, avg in averaged_payoffs_by_species.items()
+    )
+
+# |%%--%%| <VzyBhD5y8z|iEYfgwpXY7>
+
+
+# Make this a function to re-use it easily
+def weighted_average_payoffs(payoffs_matrix, split) -> dict[Strategy, float]:
+    w_avg_payoffs = {}
+    for species, averaged_payoffs_by_species in payoffs_matrix.items():
+        # 👇 For each species:
+        # - Take the expected payoff per fight (against each other species)
+        # - Weight it by the adversary's _frequency_ in the population
+        # - Return the average value obtained.
+        w_avg_payoffs[species] = mean(
+            avg * split[s] / len(population)
+            for s, avg in averaged_payoffs_by_species.items()
+        )
+    return w_avg_payoffs
+
+
+# |%%--%%| <iEYfgwpXY7|m4FS1mQHcs>
+
+
+population_size = 100
+#         👇
+n_hawks = 25
+population = [Strategy.HAWK] * n_hawks + [Strategy.DOVE] * (population_size - n_hawks)
+assert len(population) == population_size
+split = collections.Counter(population)
+print(f"Population by species: {split}")
+
+payoffs_matrix = simulate(population, n_fights=10000)
+w_avg_payoffs = weighted_average_payoffs(payoffs_matrix, split)
+print(f"Weighted average payoff: {weighted_average_payoffs}")
+
+#|%%--%%| <m4FS1mQHcs|NvwkI7SDMJ>
+
+
+results = []
+for n_hawks in range(population_size):
+    population = [Strategy.HAWK] * n_hawks + [Strategy.DOVE] * (
+        population_size - n_hawks
+    )
+    assert len(population) == population_size
+    split = collections.Counter(population)
+
+    # NOTE: This doesn't change, so we can re-use the one above.
+    # payoffs_matrix = simulate(population, n_fights=10000)
+
+    w_avg_payoffs = weighted_average_payoffs(payoffs_matrix, split)
+
+    results.append(w_avg_payoffs)
+
+f, ax = plt.subplots(figsize=(10, 4))
+ax = pd.DataFrame(results).plot.line(ax=ax)
+plt.xlabel("% of hawks in the population")
+plt.ylabel("Weighted average payoff")
+x = math.floor((7 / 12) * 100)
+y = results[x][Strategy.HAWK]
+ax.plot(x, y, 'b.')
+plt.annotate("58.33% hawks", (x, y), (x + 1, y + 1))
+plt.tight_layout()
+plt.savefig("hawks_by_frequency.svg", format="svg")
