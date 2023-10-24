@@ -183,7 +183,6 @@ for species, averaged_payoffs_by_species in payoffs_matrix.items():
     # 👇 For each species:
     # - Take the expected payoff per fight (against each other species)
     # - Weight it by the adversary's _frequency_ in the population
-    # - Return the average value obtained.
     weighted_avg_payoffs[species] = mean(
         avg * split[s] / len(population)
         for s, avg in averaged_payoffs_by_species.items()
@@ -199,7 +198,6 @@ def weighted_average_payoffs(payoffs_matrix, split) -> dict[Strategy, float]:
         # 👇 For each species:
         # - Take the expected payoff per fight (against each other species)
         # - Weight it by the adversary's _frequency_ in the population
-        # - Return the average value obtained.
         w_avg_payoffs[species] = mean(
             avg * split[s] / len(population)
             for s, avg in averaged_payoffs_by_species.items()
@@ -222,8 +220,7 @@ payoffs_matrix = simulate(population, n_fights=10000)
 w_avg_payoffs = weighted_average_payoffs(payoffs_matrix, split)
 print(f"Weighted average payoff: {weighted_average_payoffs}")
 
-#|%%--%%| <m4FS1mQHcs|NvwkI7SDMJ>
-
+# |%%--%%| <m4FS1mQHcs|CjDa96byuj>
 
 results = []
 for n_hawks in range(population_size):
@@ -246,7 +243,68 @@ plt.xlabel("% of hawks in the population")
 plt.ylabel("Weighted average payoff")
 x = math.floor((7 / 12) * 100)
 y = results[x][Strategy.HAWK]
-ax.plot(x, y, 'b.')
+ax.plot(x, y, "b.")
 plt.annotate("58.33% hawks", (x, y), (x + 1, y + 1))
 plt.tight_layout()
-plt.savefig("hawks_by_frequency.svg", format="svg")
+# plt.savefig("hawks_by_frequency.svg", format="svg")
+
+# |%%--%%| <CjDa96byuj|2YuM5t7Zad>
+
+
+def scale(d, min_payoff, max_payoff):
+    # negative numbers to 0..1
+    # positive numbers to 1..2
+    assert min_payoff < 0
+    if min_payoff < 0 and abs(min_payoff) > max_payoff:
+        max_payoff = abs(min_payoff)
+
+    r = {k: (v - min_payoff) / (0 - min_payoff) for k, v in d.items() if v < 0} | {
+        k: (1 + v - 0) / (max_payoff - 0) for k, v in d.items() if v > 0
+    }
+    assert all(0 <= v <= 2 for v in r.values())
+    return r
+
+
+# |%%--%%| <2YuM5t7Zad|5mEw6NpRd6>
+
+population_size = 10000
+n_generations = 125
+results = []
+population = [Strategy.HAWK] * (population_size // 2) + [Strategy.DOVE] * (
+    population_size // 2
+)
+payoffs_matrix = simulate(population)
+min_payoff = min(p.value for p in Points)
+max_payoff = max(p.value for p in Points)
+
+for i in range(n_generations):
+    split = collections.Counter(population)
+    results.append(split)
+
+    w_avg_payoffs = weighted_average_payoffs(payoffs_matrix, split)
+
+    # scale to 0...1...2
+    scaled_w_avg_payoffs = scale(w_avg_payoffs, min_payoff, max_payoff)
+
+    # multiply by frequency to compute fitness
+    absolute_fitness = {
+        k: split[k] * v / population_size for k, v in scaled_w_avg_payoffs.items()
+    }
+
+    # evolve to the next generation
+    population = random.choices(
+        tuple(absolute_fitness.keys()),
+        weights=tuple(absolute_fitness.values()),
+        k=population_size,
+    )
+
+# |%%--%%| <5mEw6NpRd6|NvwkI7SDMJ>
+
+f, ax = plt.subplots(figsize=(10, 4))
+df = pd.DataFrame(results) / population_size * 100
+df.plot.line(ax=ax)
+plt.axhline(y=(7 / 12) * 100, color="r", linestyle="-")
+plt.xlabel("Generation #")
+plt.ylabel("% of individuals")
+plt.tight_layout()
+plt.savefig("hawks_by_generation.svg", format="svg")
